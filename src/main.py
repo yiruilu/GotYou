@@ -1,51 +1,62 @@
-"""Entry point: run sample projects through LLMPlanner and PlanningService."""
+"""Entry point: run the GotYou research agent as a LangGraph workflow.
+
+Pipeline (LangGraph StateGraph): user research goal -> build_search_query
+-> search_papers (PaperSearchTool/arXiv) -> generate_plan (LLMPlanner/OpenAI)
+-> structured plan -> terminal output.
+"""
 
 from datetime import date, timedelta
 
-from .models import Feedback, Priority, Project, Resource, ResourceType
-from .planner import LLMPlanner, PlannerResult
+from .agent import AgentState, build_agent_graph
+from .models import Feedback, Priority, Project
+from .planner import LLMPlanner
 from .services import PlanningService
+from .tools import PaperSearchTool
 
 
-def _print_result(title: str, project: Project, result: PlannerResult) -> None:
-    print(f"\n=== {title} ===")
-    print(f"Goal: {project.goal}")
-    print(f"Planner: {result.planner_name}")
+def _print_result(state: AgentState) -> None:
+    project = state["project"]
+    plan = state["plan"]
 
-    if result.warnings:
-        print("Warnings:")
-        for warning in result.warnings:
-            print(f"  - {warning}")
+    print(f"=== {project.title} ===")
+    print(f"Research goal: {project.goal}")
+    print(f"Search query: {state['search_query']}")
 
-    if not result.generated_tasks:
-        print("No tasks generated.")
-        return
+    print(f"\nPapers found ({len(state['papers'])}):")
+    if not state["papers"]:
+        print("  (none)")
+    for paper in state["papers"]:
+        print(f"  - {paper.title} ({paper.year or 'n.d.'}) - {paper.url}")
 
-    print(f"Estimated duration: {result.estimated_duration} hours")
-    print("Generated tasks:")
-    for task in result.generated_tasks:
+    print(f"\nGenerated tasks ({len(plan.generated_tasks)}):")
+    if not plan.generated_tasks:
+        print("  (none)")
+    for task in plan.generated_tasks:
         due = task.due_date.isoformat() if task.due_date else "no due date"
         print(f"  [{task.priority.value:6}] {task.title} (due {due})")
         if task.description:
             print(f"           {task.description}")
 
+    duration = f"{plan.estimated_duration} hours" if plan.estimated_duration else "n/a"
+    print(f"\nEstimated duration: {duration}")
 
-def run_paper_revision_example() -> None:
+    if plan.warnings:
+        print("\nWarnings:")
+        for warning in plan.warnings:
+            print(f"  - {warning}")
+
+    verdict = "PASSED" if state.get("review_passed") else "FAILED"
+    print(f"\nPlan review: {verdict} (retries used: {state.get('retry_count', 0)})")
+    for note in state.get("review_notes", []):
+        print(f"  - {note}")
+
+
+def main() -> None:
     project = Project(
         id="proj-1",
         title="Revise NeurIPS Submission",
         goal="Revise my machine learning research paper for resubmission after peer review",
         deadline=date.today() + timedelta(days=7),
-        resources=[
-            Resource(
-                id="res-1",
-                title="Attention Is All You Need",
-                type=ResourceType.PAPER,
-                source="arxiv.org/abs/1706.03762",
-                summary="Foundational transformer architecture paper.",
-                relevance="Directly relevant to strengthening the related work section.",
-            ),
-        ],
         feedback=[
             Feedback(
                 id="fb-1",
@@ -61,63 +72,13 @@ def run_paper_revision_example() -> None:
         ],
     )
 
-    service = PlanningService(LLMPlanner())
-    result = service.generate_plan(project)
-    _print_result("Paper Revision (LLMPlanner)", project, result)
-
-
-def run_manual_evaluations() -> None:
-    service = PlanningService(LLMPlanner())
-
-    detailed_paper = Project(
-        id="eval-1",
-        title="Journal Resubmission",
-        goal=(
-            "Revise my paper's methodology and experiments section to address "
-            "reviewer concerns about insufficient baseline comparisons, then "
-            "resubmit to the journal."
-        ),
-        deadline=date.today() + timedelta(days=10),
-        feedback=[
-            Feedback(
-                id="fb-2",
-                source="reviewer_1",
-                content="Missing comparison against two standard baselines.",
-                category="experiments",
-                priority=Priority.HIGH,
-            ),
-        ],
+    graph = build_agent_graph(
+        paper_search_tool=PaperSearchTool(),
+        planning_service=PlanningService(LLMPlanner()),
     )
-    _print_result(
-        "Eval 1: Detailed paper revision request",
-        detailed_paper,
-        service.generate_plan(detailed_paper),
-    )
-
-    vague_request = Project(
-        id="eval-2",
-        title="Untitled Project",
-        goal="Help me get better at my research",
-    )
-    _print_result(
-        "Eval 2: Vague request, missing information",
-        vague_request,
-        service.generate_plan(vague_request),
-    )
-
-    leetcode_request = Project(
-        id="eval-3",
-        title="Interview Prep",
-        goal="Practice Leetcode problems daily to prepare for software engineering interviews",
-        deadline=date.today() + timedelta(days=30),
-    )
-    _print_result(
-        "Eval 3: Leetcode request (outside the research MVP)",
-        leetcode_request,
-        service.generate_plan(leetcode_request),
-    )
+    final_state = graph.invoke(AgentState(project=project, warnings=[]))
+    _print_result(final_state)
 
 
 if __name__ == "__main__":
-    run_paper_revision_example()
-    run_manual_evaluations()
+    main()

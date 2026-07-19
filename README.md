@@ -46,11 +46,43 @@ docs/roadmap.md
 ## 🛠 Tech Stack
 
 - Python
+- OpenAI API (LLM-based planning)
 - Git
 - GitHub
 - VS Code
 
-(LLM frameworks will be added in future versions.)
+(Additional LLM frameworks will be added in future versions.)
+
+---
+
+## ⚙️ Setup
+
+The LLM planner (`LLMPlanner`) calls the OpenAI API and needs an API key.
+
+1. Install dependencies:
+
+   ```bash
+   python3 -m pip install -r requirements.txt
+   ```
+
+2. Configure your API key:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Then edit `.env` and set `OPENAI_API_KEY` to a key from
+   [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+   `.env` is git-ignored — never commit it.
+
+3. Run the sample planning workflow:
+
+   ```bash
+   python3 -m src.main
+   ```
+
+   Without a valid `OPENAI_API_KEY`, `LLMPlanner` still runs — it returns an
+   empty plan with a warning explaining what's missing, instead of crashing.
 
 ---
 

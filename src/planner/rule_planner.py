@@ -2,6 +2,7 @@
 
 from ..models.project import Project
 from ..models.task import Task
+from ..tools.paper_result import PaperResult
 from .planner import Planner
 from .planner_result import PlannerResult
 
@@ -26,7 +27,7 @@ _KEYWORD_RULES: dict[str, list[str]] = {
 class RulePlanner(Planner):
     """Matches keywords in ``project.goal`` against a fixed rule table."""
 
-    def plan(self, project: Project) -> PlannerResult:
+    def plan(self, project: Project, papers: list[PaperResult] | None = None) -> PlannerResult:
         goal = project.goal.lower()
         warnings: list[str] = []
 

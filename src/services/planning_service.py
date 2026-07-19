@@ -5,6 +5,7 @@ from dataclasses import replace
 from ..models.project import Project
 from ..planner.planner import Planner
 from ..planner.planner_result import PlannerResult
+from ..tools.paper_result import PaperResult
 
 
 class PlanningService:
@@ -13,8 +14,8 @@ class PlanningService:
     def __init__(self, planner: Planner):
         self._planner = planner
 
-    def generate_plan(self, project: Project) -> PlannerResult:
-        return self._planner.plan(project)
+    def generate_plan(self, project: Project, papers: list[PaperResult] | None = None) -> PlannerResult:
+        return self._planner.plan(project, papers=papers)
 
     def apply_plan(self, project: Project, result: PlannerResult) -> Project:
         """Returns a new Project with the planner's tasks appended.
